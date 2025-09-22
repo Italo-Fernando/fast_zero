@@ -24,9 +24,11 @@ from fast_zero.security import get_password_hash
 
 @pytest.fixture
 def session():
-    engine = create_engine("sqlite:///:memory:",
-                           connect_args={"check_same_thread": False},
-                           poolclass=StaticPool)
+    engine = create_engine(
+        'sqlite:///:memory:',
+        connect_args={'check_same_thread': False},
+        poolclass=StaticPool,
+    )
     table_registry.metadata.create_all(engine)
 
     with Session(engine) as session:
@@ -87,7 +89,7 @@ def user(session):
 @pytest.fixture
 def token(client, user):
     response = client.post(
-        '/token',
-        data={'username': user.email,
-                'password': user.clean_password})
+        '/auth/token',
+        data={'username': user.email, 'password': user.clean_password},
+    )
     return response.json()['access_token']
