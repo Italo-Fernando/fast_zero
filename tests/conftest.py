@@ -2,9 +2,10 @@ from contextlib import contextmanager
 from datetime import datetime
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from fast_zero.app import app
@@ -22,19 +23,19 @@ from fast_zero.security import get_password_hash
 #     database.clear()
 
 
-@pytest.fixture
-def session():
-    engine = create_engine(
-        'sqlite:///:memory:',
-        connect_args={'check_same_thread': False},
-        poolclass=StaticPool,
-    )
-    table_registry.metadata.create_all(engine)
+# @pytest.fixture
+# def session():
+#     engine = create_engine(
+#         'sqlite:///:memory:',
+#         connect_args={'check_same_thread': False},
+#         poolclass=StaticPool,
+#     )
+#     table_registry.metadata.create_all(engine)
 
-    with Session(engine) as session:
-        yield session
+#     with Session(engine) as session:
+#         yield session
 
-    table_registry.metadata.drop_all(engine)
+#     table_registry.metadata.drop_all(engine)
 
 
 @pytest.fixture
@@ -69,8 +70,8 @@ def mock_db_time():
     return _mock_db_time
 
 
-@pytest.fixture
-def user(session):
+@pytest_asyncio.fixture
+async def user(session):
     password = 'testtest'
     user = User(
         username='Teste',
@@ -78,8 +79,8 @@ def user(session):
         password=get_password_hash(password),
     )
     session.add(user)
-    session.commit()
-    session.refresh(user)
+    await session.commit()
+    await session.refresh(user)
 
     user.clean_password = password
 
@@ -93,3 +94,20 @@ def token(client, user):
         data={'username': user.email, 'password': user.clean_password},
     )
     return response.json()['access_token']
+
+
+@pytest_asyncio.fixture
+async def session():
+    engine = create_async_engine(
+        'sqlite+aiosqlite:///:memory:',
+        connect_args={'check_same_thread': False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(table_registry.metadata.create_all)
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        yield session
+
+    async with engine.begin() as conn:
+        await conn.run_sync(table_registry.metadata.drop_all)

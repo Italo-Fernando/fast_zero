@@ -9,16 +9,18 @@ readme = "README.md"
 python = "^3.12"
 fastapi = {extras = ["standard"], version = "^0.116.1"}
 pydantic-settings = "^2.10.1"
-sqlalchemy = "^2.0.43"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.43"}
 alembic = "^1.16.5"
 pyjwt = "^2.10.1"
 pwdlib = {extras = ["argon2"], version = "^0.2.1"}
+aiosqlite = "^0.21.0"
 
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^6.2.1"
 taskipy = "^1.14.1"
 ruff = "^0.12.12"
+pytest-asyncio = "^1.2.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -40,6 +42,11 @@ quote-style = 'single'
 [tool.pytest.ini_options]
 pythonpath = "."
 addopts = '-p no:warnings'
+asyncio_default_fixture_loop_scope = 'function'
+
+[tool.coverage.run]
+concurrency = ["thread", "greenlet"]
+
 
 [tool.taskipy.tasks]
 lint = 'ruff check'

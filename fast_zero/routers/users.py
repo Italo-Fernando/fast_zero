@@ -1,15 +1,16 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fast_zero.database import get_session
 from fast_zero.models import User
 from fast_zero.schemas import (
     Email,
+    FilterPage,  # Add this import if FilterPage is defined in schemas
     Message,
     UserList,
     UserPublic,
@@ -21,13 +22,13 @@ from fast_zero.security import (
 )
 
 router = APIRouter(prefix='/users', tags=['users'])
-T_Session = Annotated[Session, Depends(get_session)]
+T_Session = Annotated[AsyncSession, Depends(get_session)]
 T_CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 @router.post('/', status_code=HTTPStatus.CREATED, response_model=UserPublic)
-def create_user(user: Userschema, session: T_Session):
-    db_user = session.scalar(
+async def create_user(user: Userschema, session: T_Session):
+    db_user = await session.scalar(
         select(User).where(
             (User.username == user.username) | (User.email == user.email)
         )
@@ -50,27 +51,26 @@ def create_user(user: Userschema, session: T_Session):
         username=user.username, password=hashed_password, email=user.email
     )
     session.add(db_user)
-    session.commit()
-    session.refresh(db_user)
+    await session.commit()
+    await session.refresh(db_user)
 
     return db_user
 
 
 @router.get('/', response_model=UserList)
-def read_users(
-    session: T_Session,
-    current_user: T_CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+async def read_users(
+    session: T_Session, filter_users: Annotated[FilterPage, Query()]
 ):
-    users = (
-        session.execute(select(User).offset(skip).limit(limit)).scalars().all()
+    query = await session.scalars(
+        select(User).offset(filter_users.offset).limit(filter_users.limit)
     )
+    users = query.all()
+
     return {'users': users}
 
 
 @router.put('/{user_id}', response_model=UserPublic, status_code=HTTPStatus.OK)
-def update_user(
+async def update_user(
     user_id: int,
     user: Userschema,
     session: T_Session,
@@ -86,8 +86,8 @@ def update_user(
         current_user.password = get_password_hash(user.password)
 
         session.add(current_user)
-        session.commit()
-        session.refresh(current_user)
+        await session.commit()
+        await session.refresh(current_user)
 
         return current_user
 
@@ -99,7 +99,7 @@ def update_user(
 
 
 @router.delete('/{user_id}', response_model=Message)
-def delete_user(
+async def delete_user(
     user_id: int,
     session: T_Session,
     current_user: T_CurrentUser,
@@ -114,7 +114,7 @@ def delete_user(
             status_code=HTTPStatus.FORBIDDEN, detail='Not enough permissions'
         )
     session.delete(current_user)
-    session.commit()
+    await session.commit()
     # session.refresh(user_db) não pode, mesmo que na mesma sessão o objeto foi
     # removido
 
@@ -122,7 +122,7 @@ def delete_user(
 
 
 @router.get('/{user_id}/email', response_model=Email)
-def read_user_email(
+async def read_user_email(
     user_id: int,
     session: T_Session,
     current_user: T_CurrentUser,
